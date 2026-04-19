@@ -6,180 +6,93 @@ export default function CameraCapture({ disease, onCapture }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
-  const [cameraReady, setCameraReady] = useState(false)
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Redirect if no disease selected
-    if (!disease) {
-      navigate('/select')
-      return
-    }
-
-    startCamera()
-
-    return () => {
-      stopCamera()
-    }
+    if (!disease) { navigate('/select'); return }
+    startCam()
+    return () => stopCam()
   }, [])
 
-  const startCamera = async () => {
+  const startCam = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
       })
-      streamRef.current = stream
+      streamRef.current = s
       if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play()
-          setCameraReady(true)
-        }
+        videoRef.current.srcObject = s
+        videoRef.current.onloadedmetadata = () => { videoRef.current.play(); setReady(true) }
       }
-    } catch (err) {
-      console.error('Camera error:', err)
-      setError('Unable to access camera. Please grant camera permissions and try again.')
-    }
+    } catch { setError(true) }
   }
 
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-  }
+  const stopCam = () => { streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null }
 
-  const handleCapture = () => {
+  const capture = () => {
     if (!videoRef.current || !canvasRef.current) return
-
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0)
-    
-    const imageData = canvas.toDataURL('image/jpeg', 0.85)
-    onCapture(imageData)
-    stopCamera()
-    navigate('/result')
+    const v = videoRef.current, c = canvasRef.current
+    c.width = v.videoWidth; c.height = v.videoHeight
+    c.getContext('2d').drawImage(v, 0, 0)
+    onCapture(c.toDataURL('image/jpeg', 0.85))
+    stopCam(); navigate('/result')
   }
 
-  // Demo mode: use a placeholder image when camera isn't available
-  const handleDemoCapture = () => {
-    // Create a synthetic RDT strip image using canvas
-    const canvas = document.createElement('canvas')
-    canvas.width = 640
-    canvas.height = 320
-    const ctx = canvas.getContext('2d')
-
-    // Background
-    ctx.fillStyle = '#f5f0e8'
-    ctx.fillRect(0, 0, 640, 320)
-
-    // Strip body
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(120, 40, 400, 240)
-    ctx.strokeStyle = '#cccccc'
-    ctx.lineWidth = 2
-    ctx.strokeRect(120, 40, 400, 240)
-
-    // Test window
-    ctx.fillStyle = '#fafafa'
-    ctx.fillRect(200, 80, 240, 160)
-    ctx.strokeStyle = '#999999'
-    ctx.lineWidth = 1
-    ctx.strokeRect(200, 80, 240, 160)
-
-    // C line (control)
-    ctx.fillStyle = '#c44569'
-    ctx.fillRect(220, 110, 200, 4)
-
-    // T line (test) - faint line
-    ctx.fillStyle = 'rgba(196, 69, 105, 0.5)'
-    ctx.fillRect(220, 170, 200, 3)
-
-    // Labels
-    ctx.fillStyle = '#666666'
-    ctx.font = '14px Inter, sans-serif'
-    ctx.fillText('C', 180, 115)
-    ctx.fillText('T', 180, 175)
-    ctx.fillText('S', 160, 260)
-
-    const imageData = canvas.toDataURL('image/jpeg', 0.85)
-    onCapture(imageData)
-    navigate('/result')
+  const demo = () => {
+    const c = document.createElement('canvas'); c.width = 640; c.height = 280
+    const x = c.getContext('2d')
+    x.fillStyle = '#f5f1ea'; x.fillRect(0, 0, 640, 280)
+    x.fillStyle = '#fff'; x.fillRect(100, 30, 440, 220)
+    x.strokeStyle = '#d1d5db'; x.lineWidth = 1; x.strokeRect(100, 30, 440, 220)
+    x.fillStyle = '#fafaf9'; x.fillRect(180, 60, 280, 160); x.strokeRect(180, 60, 280, 160)
+    x.fillStyle = '#c44569'; x.fillRect(200, 100, 240, 4)
+    x.fillStyle = 'rgba(196,69,105,0.35)'; x.fillRect(200, 155, 240, 3)
+    x.fillStyle = '#999'; x.font = '12px sans-serif'
+    x.fillText('C', 168, 105); x.fillText('T', 168, 160)
+    onCapture(c.toDataURL('image/jpeg', 0.85)); navigate('/result')
   }
 
   if (error) {
     return (
       <div className="page">
-        <div className="nav-header">
-          <button className="nav-back" onClick={() => navigate('/select')}>←</button>
-          <span className="nav-title">Camera</span>
+        <div className="topbar">
+          <button className="topbar-back" onClick={() => navigate('/select')}>← Back</button>
+          <span className="topbar-title">Capture</span>
+          <span className="topbar-right"></span>
         </div>
-        <div className="analyzing-screen">
-          <div style={{ fontSize: '48px' }}>📷</div>
-          <p className="analyzing-text">Camera Unavailable</p>
-          <p className="analyzing-subtext">{error}</p>
-          <button 
-            className="btn btn-primary btn-lg"
-            onClick={handleDemoCapture}
-            style={{ marginTop: '16px' }}
-          >
-            🧪 Use Demo Image
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={startCamera}
-            style={{ marginTop: '8px' }}
-          >
-            Retry Camera
-          </button>
+        <div className="cam-fallback">
+          <p className="t-large">Camera unavailable</p>
+          <p className="t-body" style={{ textAlign: 'center' }}>
+            Grant camera permission or use a demo image to test the flow.
+          </p>
+          <div className="spacer-sm"></div>
+          <button className="btn btn-dark" onClick={demo}>Use Demo Image</button>
+          <button className="btn btn-outline btn-sm" onClick={startCam} style={{ marginTop: 4 }}>Retry</button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="page" style={{ padding: '12px' }}>
-      <div className="nav-header" style={{ padding: '0 12px' }}>
-        <button className="nav-back" onClick={() => { stopCamera(); navigate('/select'); }}>
-          ←
-        </button>
-        <span className="nav-title">
-          Scan {disease?.name} RDT
-        </span>
-      </div>
-
-      <div className="camera-container">
-        <div className="viewfinder">
+    <div className="page camera-page" style={{ padding: 0 }}>
+      <button className="cam-back-btn" onClick={() => { stopCam(); navigate('/select') }}>← Back</button>
+      <div className="cam-body">
+        <div className="cam-finder">
           <video ref={videoRef} playsInline muted />
           <canvas ref={canvasRef} />
-          {cameraReady && (
-            <div className="viewfinder-overlay">
-              <div className="viewfinder-guide">
-                <div className="corner-tr"></div>
-                <div className="corner-bl"></div>
-                <div className="corner-br"></div>
+          {ready && (
+            <div className="cam-overlay">
+              <div className="cam-frame">
+                <div className="c1"></div>
+                <div className="c2"></div>
               </div>
+              <p className="cam-label">Align {disease?.name} RDT strip within frame</p>
             </div>
           )}
         </div>
-
-        <div className="capture-controls">
-          <button 
-            id="capture-btn"
-            className="capture-btn" 
-            onClick={handleCapture}
-            disabled={!cameraReady}
-            aria-label="Capture photo"
-          />
+        <div className="cam-bar">
+          <button id="capture-btn" className="cam-shutter" onClick={capture} disabled={!ready} aria-label="Capture" />
         </div>
       </div>
     </div>

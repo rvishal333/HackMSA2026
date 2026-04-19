@@ -1,89 +1,48 @@
 import { useNavigate } from 'react-router-dom'
 
-const diseases = [
-  {
-    id: 'malaria',
-    name: 'Malaria',
-    icon: '🦟',
-    description: 'Pf/Pv RDT',
-    available: true,
-  },
-  {
-    id: 'dengue',
-    name: 'Dengue',
-    icon: '🔴',
-    description: 'NS1/IgM/IgG RDT',
-    available: true,
-  },
-  {
-    id: 'zika',
-    name: 'Zika',
-    icon: '🧬',
-    description: 'IgM/IgG RDT',
-    available: false,
-  },
-  {
-    id: 'chikungunya',
-    name: 'Chikungunya',
-    icon: '🔥',
-    description: 'IgM RDT',
-    available: false,
-  },
+const tests = [
+  { id: 'malaria', name: 'Malaria', type: 'P. falciparum / P. vivax lateral flow', tag: 'Pf/Pv', ok: true },
+  { id: 'dengue', name: 'Dengue', type: 'NS1 Antigen / IgM / IgG lateral flow', tag: 'NS1', ok: true },
+  { id: 'zika', name: 'Zika', type: 'IgM / IgG antibody lateral flow', tag: '—', ok: false },
+  { id: 'chikungunya', name: 'Chikungunya', type: 'IgM rapid immunoassay', tag: '—', ok: false },
 ]
 
 export default function SelectDisease({ onSelect }) {
   const navigate = useNavigate()
 
-  const handleSelect = (disease) => {
-    if (!disease.available) return
-    onSelect(disease)
+  const pick = (t) => {
+    if (!t.ok) return
+    onSelect(t)
     navigate('/scan')
   }
 
   return (
-    <div className="page">
-      <div className="nav-header">
-        <button className="nav-back" onClick={() => navigate('/')}>
-          ←
-        </button>
-        <span className="nav-title">Select RDT Type</span>
+    <div className="page select-page">
+      <div className="topbar">
+        <button className="topbar-back" onClick={() => navigate('/')}>← Back</button>
+        <span className="topbar-title">Select Test</span>
+        <span className="topbar-right"></span>
       </div>
 
-      <p className="page-subtitle">
-        What disease is the rapid diagnostic test designed to detect?
+      <div className="spacer-sm"></div>
+      <p className="select-instruction">
+        Which RDT are you reading?
       </p>
+      <div className="spacer-md"></div>
 
-      <div className="section-label">Available</div>
-      <div className="disease-grid">
-        {diseases.filter(d => d.available).map(disease => (
+      <div className="test-list">
+        {tests.map(t => (
           <div
-            key={disease.id}
-            id={`disease-${disease.id}`}
-            className="card card-interactive disease-card"
-            data-disease={disease.id}
-            onClick={() => handleSelect(disease)}
+            key={t.id}
+            id={`disease-${t.id}`}
+            className={`test-row ${!t.ok ? 'disabled' : ''}`}
+            onClick={() => pick(t)}
           >
-            <span className="disease-icon">{disease.icon}</span>
-            <span className="disease-name">{disease.name}</span>
-            <span className="disease-badge">{disease.description}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="section-label" style={{ marginTop: 'var(--space-xl)' }}>
-        Coming Soon
-      </div>
-      <div className="disease-grid">
-        {diseases.filter(d => !d.available).map(disease => (
-          <div
-            key={disease.id}
-            id={`disease-${disease.id}`}
-            className="card card-disabled disease-card"
-            data-disease={disease.id}
-          >
-            <span className="disease-icon">{disease.icon}</span>
-            <span className="disease-name">{disease.name}</span>
-            <span className="disease-badge coming-soon">Coming Soon</span>
+            <div className="test-row-left">
+              <div className="test-row-name">{t.name}</div>
+              <div className="test-row-type">{t.type}</div>
+            </div>
+            <span className="test-row-tag">{t.ok ? t.tag : 'Unavailable'}</span>
           </div>
         ))}
       </div>

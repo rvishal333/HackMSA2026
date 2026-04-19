@@ -1,244 +1,164 @@
 import { useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { IconCheck } from '../components/Icons'
 
-// Simulated AI analysis — returns realistic results
-function simulateAnalysis(disease) {
-  const isPositive = Math.random() > 0.4 // 60% positive for demo impact
-  const confidence = isPositive 
-    ? Math.floor(85 + Math.random() * 13)  // 85-97%
-    : Math.floor(88 + Math.random() * 10)  // 88-97%
-  
-  const results = {
+function simulate(disease) {
+  const pos = Math.random() > 0.4
+  const conf = pos ? Math.floor(85 + Math.random() * 13) : Math.floor(88 + Math.random() * 10)
+
+  const d = {
     malaria: {
-      positive: {
-        label: 'Positive — P. falciparum detected',
-        details: 'Test line (Pf) and control line (C) detected',
-      },
-      negative: {
-        label: 'Negative — No parasite detected',
-        details: 'Only control line (C) detected',
-      }
+      pos: { label: 'Positive', interp: 'Pf antigen line detected alongside control line. Consistent with P. falciparum infection.', test: pos && Math.random() > 0.5 ? 'Faint' : 'Detected' },
+      neg: { label: 'Negative', interp: 'Control line present. No Pf antigen line detected.', test: 'Not detected' },
     },
     dengue: {
-      positive: {
-        label: 'Positive — NS1 Antigen detected',
-        details: 'NS1 band and control line (C) detected',
-      },
-      negative: {
-        label: 'Negative — No antigen detected',
-        details: 'Only control line (C) detected',
-      }
-    }
+      pos: { label: 'Positive', interp: 'NS1 band and control line detected. Consistent with acute dengue.', test: pos && Math.random() > 0.5 ? 'Faint' : 'Detected' },
+      neg: { label: 'Negative', interp: 'Control line present. No NS1 band detected.', test: 'Not detected' },
+    },
   }
 
-  const diseaseId = disease?.id || 'malaria'
-  const resultData = results[diseaseId] || results.malaria
-  const outcome = isPositive ? resultData.positive : resultData.negative
-
-  return {
-    result: isPositive ? 'Positive' : 'Negative',
-    confidence,
-    label: outcome.label,
-    details: outcome.details,
-    lineIntensity: isPositive ? 'Strong' : 'N/A',
-    controlLine: 'Valid',
-  }
+  const dd = d[disease?.id] || d.malaria
+  const o = pos ? dd.pos : dd.neg
+  return { result: o.label, confidence: conf, interpretation: o.interp, control: 'Detected', test: o.test }
 }
 
 export default function Result({ scanData, onReset }) {
   const navigate = useNavigate()
-  const [analyzing, setAnalyzing] = useState(true)
-  const [analysis, setAnalysis] = useState(null)
-  const [location, setLocation] = useState(null)
+  const [phase, setPhase] = useState('analyzing')
+  const [data, setData] = useState(null)
+  const [loc, setLoc] = useState(null)
+  const [step, setStep] = useState(0)
+  const [showConf, setShowConf] = useState(false)
+  const saved = useRef(false)
 
   useEffect(() => {
-    if (!scanData?.image) {
-      navigate('/select')
-      return
-    }
-
-    // Get location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({
-            lat: pos.coords.latitude.toFixed(4),
-            lng: pos.coords.longitude.toFixed(4),
-          })
-        },
-        () => {
-          setLocation({ lat: '—', lng: '—' })
-        }
-      )
-    }
-
-    // Simulate AI processing delay
-    const timer = setTimeout(() => {
-      const result = simulateAnalysis(scanData.disease)
-      setAnalysis(result)
-      setAnalyzing(false)
-    }, 2500)
-
-    return () => clearTimeout(timer)
+    if (!scanData?.image) { navigate('/select'); return }
+    navigator.geolocation?.getCurrentPosition(
+      p => setLoc({ lat: p.coords.latitude.toFixed(4), lng: p.coords.longitude.toFixed(4) }),
+      () => {}
+    )
+    const t = [
+      setTimeout(() => setStep(1), 300),
+      setTimeout(() => setStep(2), 1000),
+      setTimeout(() => setStep(3), 1700),
+      setTimeout(() => {
+        setData(simulate(scanData.disease))
+        setPhase('done')
+        setTimeout(() => setShowConf(true), 200)
+      }, 2400),
+    ]
+    return () => t.forEach(clearTimeout)
   }, [])
 
-  const handleSave = () => {
-    // Save to localStorage
-    const history = JSON.parse(localStorage.getItem('vectorscan_history') || '[]')
-    const entry = {
-      id: Date.now(),
-      disease: scanData.disease?.name || 'Unknown',
-      diseaseId: scanData.disease?.id || 'unknown',
-      result: analysis.result,
-      confidence: analysis.confidence,
-      timestamp: new Date().toISOString(),
-      location,
-      image: scanData.image,
-    }
-    history.unshift(entry)
-    localStorage.setItem('vectorscan_history', JSON.stringify(history))
-    
-    onReset()
-    navigate('/')
+  const save = () => {
+    if (saved.current || !data) return
+    saved.current = true
+    const h = JSON.parse(localStorage.getItem('vectorscan_history') || '[]')
+    h.unshift({ id: Date.now(), disease: scanData.disease?.name, diseaseId: scanData.disease?.id, result: data.result, confidence: data.confidence, timestamp: new Date().toISOString(), location: loc, image: scanData.image })
+    localStorage.setItem('vectorscan_history', JSON.stringify(h))
   }
 
-  const handleNewScan = () => {
-    // Save first, then start new
-    const history = JSON.parse(localStorage.getItem('vectorscan_history') || '[]')
-    const entry = {
-      id: Date.now(),
-      disease: scanData.disease?.name || 'Unknown',
-      diseaseId: scanData.disease?.id || 'unknown',
-      result: analysis.result,
-      confidence: analysis.confidence,
-      timestamp: new Date().toISOString(),
-      location,
-      image: scanData.image,
-    }
-    history.unshift(entry)
-    localStorage.setItem('vectorscan_history', JSON.stringify(history))
-    
-    onReset()
-    navigate('/select')
-  }
+  const newScan = () => { save(); onReset(); navigate('/select') }
+  const done = () => { save(); onReset(); navigate('/') }
 
-  if (analyzing) {
+  if (phase === 'analyzing') {
+    const steps = ['Detecting control line', 'Analyzing test region', 'Computing confidence']
     return (
       <div className="page">
-        <div className="analyzing-screen">
-          <div className="analyzing-spinner"></div>
-          <p className="analyzing-text">Analyzing RDT Strip...</p>
-          <p className="analyzing-subtext">
-            AI is reading test lines for {scanData?.disease?.name || 'the selected disease'}
-          </p>
+        <div className="analyzing">
+          <div className="analyze-spinner"></div>
+          <p className="t-large">Processing</p>
+          <p className="t-small">Analyzing {scanData?.disease?.name} RDT</p>
+          <div className="analyze-steps">
+            {steps.map((s, i) => (
+              <div key={i} className={`a-step ${step > i + 1 ? 'done' : step >= i + 1 ? 'active' : ''}`}>
+                <span className="a-step-dot"></span>
+                {s}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
   }
 
-  const isPositive = analysis.result === 'Positive'
-  const confidenceColor = analysis.confidence >= 90 
-    ? 'var(--positive)' 
-    : analysis.confidence >= 75 
-      ? 'var(--warning)' 
-      : 'var(--negative)'
-
-  // SVG ring calculations
-  const radius = 48
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (analysis.confidence / 100) * circumference
-
-  const timestamp = new Date().toLocaleString()
+  const pos = data.result === 'Positive'
+  const cl = data.confidence >= 90 ? 'high' : data.confidence >= 75 ? 'med' : 'low'
+  const ts = new Date().toLocaleString()
 
   return (
-    <div className="page">
-      <div className="nav-header">
-        <button className="nav-back" onClick={() => navigate('/')}>←</button>
-        <span className="nav-title">Results</span>
+    <div className="page result-page">
+      <div className="topbar">
+        <button className="topbar-back" onClick={done}>← Back</button>
+        <span className="topbar-title">Result</span>
+        <span className="topbar-right">{scanData.disease?.name}</span>
       </div>
 
-      {scanData.image && (
-        <img 
-          src={scanData.image} 
-          alt="Captured RDT strip" 
-          className="result-image" 
-        />
-      )}
-
-      <div className="card result-card">
-        <div className="result-status">
-          {isPositive ? '⚠️' : '✅'}
+      <div className="result-top">
+        <div className={`result-badge ${pos ? 'positive' : 'negative'}`}>
+          {data.result}
         </div>
-        <div className={`result-label ${isPositive ? 'positive' : 'negative'}`}>
-          {analysis.result}
-        </div>
-        <div className="result-disease">
-          {analysis.label}
-        </div>
-
-        {/* Confidence Ring */}
-        <div className="confidence-ring">
-          <svg width="120" height="120" viewBox="0 0 120 120">
-            <circle className="ring-bg" cx="60" cy="60" r={radius} />
-            <circle 
-              className="ring-fill" 
-              cx="60" cy="60" r={radius}
-              stroke={confidenceColor}
-              strokeDasharray={circumference}
-              strokeDashoffset={offset}
-            />
-          </svg>
-          <span className="confidence-value" style={{ color: confidenceColor }}>
-            {analysis.confidence}%
-          </span>
-        </div>
-        <div className="confidence-label">AI Confidence Score</div>
+        <div className="result-type">{scanData.disease?.name} — Lateral flow immunoassay</div>
       </div>
 
-      <div className="result-details">
-        <div className="detail-item">
-          <div className="detail-icon">🧪</div>
-          <div className="detail-label">Control Line</div>
-          <div className="detail-value">{analysis.controlLine}</div>
-        </div>
-        <div className="detail-item">
-          <div className="detail-icon">📊</div>
-          <div className="detail-label">Line Intensity</div>
-          <div className="detail-value">{analysis.lineIntensity}</div>
-        </div>
-        <div className="detail-item">
-          <div className="detail-icon">📍</div>
-          <div className="detail-label">Location</div>
-          <div className="detail-value">
-            {location ? `${location.lat}, ${location.lng}` : 'Loading...'}
+      <div className="result-sections">
+        {/* Image */}
+        {scanData.image && (
+          <div className="r-section">
+            <div className="r-section-title">Captured Image</div>
+            <img src={scanData.image} alt="RDT" className="r-image" />
+          </div>
+        )}
+
+        {/* Confidence */}
+        <div className="r-section">
+          <div className="r-section-title">Confidence</div>
+          <div className={`r-confidence ${cl}`}>{showConf ? data.confidence : 0}%</div>
+          <div className="r-bar">
+            <div className={`r-bar-fill ${cl}`} style={{ width: showConf ? `${data.confidence}%` : '0' }} />
           </div>
         </div>
-        <div className="detail-item">
-          <div className="detail-icon">🕐</div>
-          <div className="detail-label">Timestamp</div>
-          <div className="detail-value" style={{ fontSize: '11px' }}>
-            {timestamp}
+
+        {/* Line Detection */}
+        <div className="r-section">
+          <div className="r-section-title">Line Detection</div>
+          <div className="r-row">
+            <span className="r-label">Control line (C)</span>
+            <span className="r-value green">{data.control}</span>
+          </div>
+          <div className="r-row">
+            <span className="r-label">Test line (T)</span>
+            <span className={`r-value ${data.test === 'Not detected' ? 'muted' : 'red'}`}>
+              {data.test}
+            </span>
+          </div>
+        </div>
+
+        {/* Interpretation */}
+        <div className="r-section">
+          <div className="r-section-title">Interpretation</div>
+          <p className="r-interpretation">{data.interpretation}</p>
+        </div>
+
+        {/* Meta */}
+        <div className="r-section">
+          <div className="r-section-title">Metadata</div>
+          <div className="r-meta">
+            <div className="r-meta-item">
+              <div className="r-meta-label">Location</div>
+              <div className="r-meta-value">{loc ? `${loc.lat}, ${loc.lng}` : 'Unavailable'}</div>
+            </div>
+            <div className="r-meta-item">
+              <div className="r-meta-label">Timestamp</div>
+              <div className="r-meta-value">{ts}</div>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="result-actions">
-        <button 
-          id="save-new-scan-btn"
-          className="btn btn-primary btn-full" 
-          onClick={handleNewScan}
-        >
-          <span className="btn-icon">📷</span>
-          Save & New Scan
-        </button>
-        <button 
-          id="save-done-btn"
-          className="btn btn-secondary btn-full" 
-          onClick={handleSave}
-        >
-          <span className="btn-icon">✓</span>
-          Save & Done
-        </button>
+        <button className="btn btn-dark btn-full" onClick={newScan}>New Scan →</button>
+        <button className="btn btn-outline btn-full" onClick={done}>Done</button>
       </div>
     </div>
   )
